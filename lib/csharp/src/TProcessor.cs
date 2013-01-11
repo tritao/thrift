@@ -22,6 +22,8 @@
  */
 
 using System;
+using System.Collections.Generic;
+using System.IO;
 using Thrift.Protocol;
 
 namespace Thrift
@@ -30,4 +32,42 @@ namespace Thrift
 	{
 		bool Process(TProtocol iprot, TProtocol oprot);
 	}
+
+    public abstract class TSimpleProcessor : TProcessor
+    {
+        protected delegate void ProcessFunction(int seqid, TProtocol iprot, TProtocol oprot);
+        protected Dictionary<string, ProcessFunction> processMap_;
+
+        public TSimpleProcessor()
+        {
+            processMap_ = new Dictionary<string, ProcessFunction>();
+        }
+
+        public bool Process(TProtocol iprot, TProtocol oprot)
+        {
+            try
+            {
+                TMessage msg = iprot.ReadMessageBegin();
+                ProcessFunction fn;
+                processMap_.TryGetValue(msg.Name, out fn);
+                if (fn == null)
+                {
+                    TProtocolUtil.Skip(iprot, TType.Struct);
+                    iprot.ReadMessageEnd();
+                    TApplicationException x = new TApplicationException(TApplicationException.ExceptionType.UnknownMethod, "Invalid method name: '" + msg.Name + "'");
+                    oprot.WriteMessageBegin(new TMessage(msg.Name, TMessageType.Exception, msg.SeqID));
+                    x.Write(oprot);
+                    oprot.WriteMessageEnd();
+                    oprot.Transport.Flush();
+                    return true;
+                }
+                fn(msg.SeqID, iprot, oprot);
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+            return true;
+        }
+    }
 }
