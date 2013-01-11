@@ -32,6 +32,7 @@ namespace Thrift.Protocol
 		Bool = 2,
 		Byte = 3,
 		Double = 4,
+		Exception = 5,
 		I16 = 6,
 		I32 = 8,
 		I64 = 10,
