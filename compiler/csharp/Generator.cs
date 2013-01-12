@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
@@ -583,7 +584,7 @@ namespace Thrift.Compiler
                 case TType.List:
                 case TType.Map:
                 case TType.Set:
-                    GenerateContainerDeserialize(param);
+                    GenerateContainerSerialize(param);
                     break;
                 case TType.Bool:
                 case TType.Byte:
@@ -616,8 +617,12 @@ namespace Thrift.Compiler
             WriteLine("{0}Impl.Write(oprot);", ToTitleCase(param.Name));
         }
 
+        // Used to generate unique names when de/serializing collections.
+        int GenericIndex = 0;
+
         void GenerateContainerSerialize(Parameter param)
         {
+            GenerateListSerialize(param);
         }
 
         void GenerateFieldDeserialize(Parameter param)
@@ -677,6 +682,68 @@ namespace Thrift.Compiler
 
         void GenerateContainerDeserialize(Parameter param)
         {
+            GenerateListDeserialize(param);
+        }
+
+        void GenerateListSerialize(Parameter param)
+        {
+            var paramType = param.ParameterType;
+            var listElemType = param.ParameterType.GetGenericArguments()[0];
+
+            WriteLine("oprot.WriteListBegin(new TList(TType.{0}, {1}.Count));",
+                      ConvertFromTypeToThrift(paramType).ToString(),
+                      ToTitleCase(param.Name));
+
+            var iterName = string.Format("_iter{0}", GenericIndex++);
+            WriteLine("foreach (var {0} in {1})", iterName, ToTitleCase(param.Name));
+            WriteStartBraceIndent();
+
+            var elemName = string.Format("_elem{0}", GenericIndex++);
+            WriteLine("var {0} = new {1}Impl()", elemName, listElemType.Name);
+            WriteStartBraceIndent();
+            foreach (var field in listElemType.GetFields())
+                WriteLine("{0} = {1}.{0},", field.Name, iterName);
+            PopIndent();
+            WriteLine("};");
+
+            WriteLine("{0}.Write(oprot);", elemName);
+            WriteCloseBraceIndent();
+
+            WriteLine("oprot.WriteListEnd();");
+        }
+
+        void GenerateListDeserialize(Parameter param)
+        {
+            var listElemType = param.ParameterType.GetGenericArguments()[0];
+
+            WriteLine("{0} = new List<{1}>();", ToTitleCase(param.Name),
+                      ConvertToGenericArgsString(param.ParameterType));
+
+            var listName = string.Format("_list{0}", GenericIndex++);
+            WriteLine("var {0} = iprot.ReadListBegin();", listName);
+
+            var loopName = string.Format("_i{0}", GenericIndex++);
+            WriteLine("for (var {0} = 0; {0} < {1}.Count; ++{0})",
+                      loopName, listName);
+
+            WriteStartBraceIndent();
+
+            var elemName = string.Format("_elem{0}", GenericIndex++);
+            WriteLine("var {0} = new {1}Impl();", elemName, listElemType.Name);
+            WriteLine("{0}.Read(iprot);", elemName);
+
+            var elemName2 = string.Format("_elem{0}", GenericIndex++);
+            WriteLine("var {0} = new {1}()", elemName2, listElemType.FullName);
+            WriteStartBraceIndent();
+            foreach (var field in listElemType.GetFields())
+                WriteLine("{0} = {1}.{0},", field.Name, elemName);
+            PopIndent();
+            WriteLine("};");
+
+            WriteLine("{0}.Add({1});", ToTitleCase(param.Name), elemName2);
+
+            WriteCloseBraceIndent();
+            WriteLine("iprot.ReadListEnd();");
         }
 
         void GenerateServiceMethodRead(IEnumerable<Parameter> parameters, bool isResult)
@@ -796,7 +863,8 @@ namespace Thrift.Compiler
                     continue;
 
                 if (IsNullableType(param.ParameterType))
-                    WriteLine("if ({0} != null && __isset.{0})", ToTitleCase(param.Name));
+                    WriteLine("if ({0} != null && __isset.{1})", ToTitleCase(param.Name),
+                        param.Name);
                 else
                     WriteLine("if (__isset.{0})", param.Name);
 
@@ -981,6 +1049,54 @@ namespace Thrift.Compiler
             }
         }
 
+        static string ConvertToGenericArgsString(Type type)
+        {
+            var thriftType = ConvertFromTypeToThrift(type);
+            return ConvertToGenericArgsString(type, thriftType);
+        }
+
+        static string ConvertToGenericArgsString(Type type, TType thriftType)
+        {
+            var sb = new StringBuilder();
+
+            var parameters = type.GetGenericArguments();
+            for (var i = 0; i < parameters.Length; i++)
+            {
+                var param = parameters[i];
+                sb.Append(param.FullName);
+                if (i < parameters.Length - 1)
+                    sb.Append(", ");
+            }
+
+            return sb.ToString();
+        }
+
+        static string ConvertToGenericTypeString(Type type, TType thriftType)
+        {
+            var sb = new StringBuilder();
+            Debug.Assert(type.IsGenericType);
+
+            switch (thriftType)
+            {
+                default:
+                    throw new NotSupportedException();
+                case TType.List:
+                    sb.Append("IList<");
+                    break;
+                case TType.Map:
+                    sb.Append("IDictionary<");
+                    break;
+                case TType.Set:
+                    sb.Append("ISet<");
+                    break;
+            }
+
+            sb.Append(ConvertToGenericArgsString(type, thriftType));
+            sb.Append(">");
+
+            return sb.ToString();
+        }
+
         static string ConvertToTypeString(Type type)
         {
             if (type.IsEnum)
@@ -988,8 +1104,16 @@ namespace Thrift.Compiler
 
             var thriftType = ConvertFromTypeToThrift(type);
 
-            if (thriftType == TType.Struct || thriftType == TType.Exception)
-                return type.FullName;
+            switch (thriftType)
+            {
+                case TType.Struct:
+                case TType.Exception:
+                    return type.FullName;
+                case TType.List:
+                case TType.Map:
+                case TType.Set:
+                    return ConvertToGenericTypeString(type, thriftType);
+            }
 
             return ConvertToTypeString(thriftType);
         }
