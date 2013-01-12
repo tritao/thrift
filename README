@@ -27,7 +27,7 @@ thrift/
   compiler/
     cpp/
       Contains the Thrift compiler, implemented in C++.
-    cpp/
+    csharp/
       Contains the Thrift C# IDL compiler, implemented in C#.
 
   lib/
