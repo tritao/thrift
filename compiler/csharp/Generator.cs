@@ -1155,6 +1155,8 @@ namespace Thrift.Compiler
                 Name = info.Name;
                 ParameterType = info.ParameterType;
                 var id = info.GetCustomAttribute<IdAttribute>();
+                if (id == null)
+                    throw new Exception("expected an Id() attribute");
                 Id = id.Id;
             }
 
@@ -1163,6 +1165,8 @@ namespace Thrift.Compiler
                 Name = info.Name;
                 ParameterType = info.FieldType;
                 var id = info.GetCustomAttribute<IdAttribute>();
+                if (id == null)
+                    throw new Exception("expected an Id() attribute");
                 Id = id.Id;
             }
 
