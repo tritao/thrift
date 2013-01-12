@@ -976,6 +976,7 @@ namespace Thrift.Compiler
         static bool IsInstanceOfGenericType(Type genericType, object instance)
         {
             Type type = instance.GetType();
+
             while (type != null)
             {
                 if (type.IsGenericType &&
@@ -983,8 +984,16 @@ namespace Thrift.Compiler
                 {
                     return true;
                 }
+
+                foreach (var @interface in type.GetInterfaces())
+                {
+                    if (@interface.IsAssignableFrom(type))
+                        return true;
+                }
+
                 type = type.BaseType;
             }
+
             return false;
         }
 
@@ -1015,14 +1024,15 @@ namespace Thrift.Compiler
             }
             else if (type.IsValueType && !type.IsPrimitive)
                 return TType.Struct;
+            else if (type.IsSubclassOf(typeof(Exception)))
+                return TType.Exception;
             else if (IsInstanceOfGenericType(typeof (IList<>), type))
                 return TType.List;
             else if (IsInstanceOfGenericType(typeof (IDictionary<,>), type))
                 return TType.Map;
             else if (IsInstanceOfGenericType(typeof (ISet<>), type))
                 return TType.Set;
-            else if (type.IsSubclassOf(typeof (Exception)))
-                return TType.Exception;
+
             throw new NotImplementedException();
         }
 
