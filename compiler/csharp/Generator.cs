@@ -550,7 +550,7 @@ namespace Thrift.Compiler
             return parameters;
         }
 
-        void GenerateIsSet(List<Parameter> parameters)
+        void GenerateIsSet(IEnumerable<Parameter> parameters)
         {
             // Generate an __isset structure that keeps track of what variables
             // have been set.
@@ -833,8 +833,6 @@ namespace Thrift.Compiler
                 case TType.List:
                 case TType.Map:
                 case TType.Set:
-                //case TType.Struct:
-                //case TType.Exception:
                 case TType.String:
                     return true;
                 default:
@@ -1018,10 +1016,7 @@ namespace Thrift.Compiler
             else if (type == typeof(string))
                 return TType.String;
             else if (type.IsEnum)
-            {
-                var baseType = Enum.GetUnderlyingType(type);
-                return ConvertFromTypeToThrift(baseType);
-            }
+                return ConvertFromTypeToThrift(Enum.GetUnderlyingType(type));
             else if (type.IsValueType && !type.IsPrimitive)
                 return TType.Struct;
             else if (type.IsSubclassOf(typeof(Exception)))
@@ -1154,9 +1149,11 @@ namespace Thrift.Compiler
             {
                 Name = info.Name;
                 ParameterType = info.ParameterType;
+
                 var id = info.GetCustomAttribute<IdAttribute>();
                 if (id == null)
                     throw new Exception("expected an Id() attribute");
+
                 Id = id.Id;
             }
 
@@ -1164,9 +1161,11 @@ namespace Thrift.Compiler
             {
                 Name = info.Name;
                 ParameterType = info.FieldType;
+
                 var id = info.GetCustomAttribute<IdAttribute>();
                 if (id == null)
                     throw new Exception("expected an Id() attribute");
+
                 Id = id.Id;
             }
 
